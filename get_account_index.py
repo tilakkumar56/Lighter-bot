@@ -6,10 +6,8 @@ import asyncio
 try:
     import lighter
 except ImportError:
-    print("=" * 50)
     print("ERROR: Lighter SDK not installed!")
     print("Run: pip install lighter-sdk")
-    print("=" * 50)
     exit(1)
 
 
@@ -21,29 +19,39 @@ async def get_account_info(wallet_address: str):
     
     try:
         api = lighter.AccountApi(BASE_URL)
-        account_data = await api.account(l1_address=wallet_address)
         
-        print(f"\n✅ Account Found!")
-        print(f"   Account Index: {account_data.index}")
-        print(f"   L1 Address: {account_data.l1_address}")
+        # Try accounts_by_l1_address method
+        accounts = await api.accounts_by_l1_address(wallet_address)
         
-        if hasattr(account_data, 'collateral'):
-            print(f"   Collateral: {account_data.collateral}")
-        
-        print("\n" + "=" * 50)
-        print("Add this to your .env file:")
-        print(f"ACCOUNT_INDEX={account_data.index}")
-        print("=" * 50)
-        
-        return account_data.index
+        if accounts:
+            print(f"\n✅ Account(s) Found!")
+            
+            # Handle if it's a list or single object
+            if isinstance(accounts, list):
+                for acc in accounts:
+                    print(f"   Account Index: {acc.index if hasattr(acc, 'index') else acc}")
+            else:
+                print(f"   Account Data: {accounts}")
+                if hasattr(accounts, 'index'):
+                    print(f"   Account Index: {accounts.index}")
+                elif hasattr(accounts, 'accounts'):
+                    for acc in accounts.accounts:
+                        print(f"   Account Index: {acc.index}")
+            
+            print("\n" + "=" * 50)
+        else:
+            print("No accounts found")
         
     except Exception as e:
-        print(f"\n❌ Error: {e}")
-        print("\nMake sure:")
-        print("1. Your wallet is connected to Lighter.xyz")
-        print("2. You have made at least one transaction")
-        print("3. The wallet address is correct")
-        return None
+        print(f"\n❌ Error with accounts_by_l1_address: {e}")
+        
+        # Try alternative approach
+        print("\nTrying alternative method...")
+        try:
+            # Check available methods
+            print(f"Available AccountApi methods: {[m for m in dir(api) if not m.startswith('_')]}")
+        except:
+            pass
 
 
 def main():
