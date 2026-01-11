@@ -84,10 +84,19 @@ class LighterClient:
             raise Exception("Lighter SDK not installed. Run: pip install lighter-sdk")
         
         try:
+            # Clean up private key format
+            private_key = self.eth_private_key.strip()
+            
+            # Remove 0x prefix if present
+            if private_key.startswith("0x"):
+                private_key = private_key[2:]
+            
+            logger.info(f"Private key length: {len(private_key)} characters")
+            
             # Initialize SignerClient for transactions
             self._signer_client = lighter.SignerClient(
                 url=self.base_url,
-                api_private_keys={self.api_key_index: self.eth_private_key},
+                api_private_keys={self.api_key_index: private_key},
                 account_index=self.account_index
             )
             
