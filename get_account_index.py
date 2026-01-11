@@ -5,6 +5,7 @@ import asyncio
 
 try:
     import lighter
+    from lighter import ApiClient, Configuration, AccountApi
 except ImportError:
     print("ERROR: Lighter SDK not installed!")
     print("Run: pip install lighter-sdk")
@@ -18,40 +19,35 @@ async def get_account_info(wallet_address: str):
     print("=" * 50)
     
     try:
-        api = lighter.AccountApi(BASE_URL)
+        # Create proper API client configuration
+        config = Configuration(host=BASE_URL)
+        api_client = ApiClient(config)
+        api = AccountApi(api_client)
         
         # Try accounts_by_l1_address method
         accounts = await api.accounts_by_l1_address(wallet_address)
         
-        if accounts:
-            print(f"\n✅ Account(s) Found!")
-            
-            # Handle if it's a list or single object
-            if isinstance(accounts, list):
-                for acc in accounts:
-                    print(f"   Account Index: {acc.index if hasattr(acc, 'index') else acc}")
-            else:
-                print(f"   Account Data: {accounts}")
-                if hasattr(accounts, 'index'):
-                    print(f"   Account Index: {accounts.index}")
-                elif hasattr(accounts, 'accounts'):
-                    for acc in accounts.accounts:
-                        print(f"   Account Index: {acc.index}")
-            
-            print("\n" + "=" * 50)
-        else:
-            print("No accounts found")
+        print(f"\n✅ Account(s) Found!")
+        print(f"   Response: {accounts}")
         
-    except Exception as e:
-        print(f"\n❌ Error with accounts_by_l1_address: {e}")
+        if hasattr(accounts, 'accounts'):
+            for acc in accounts.accounts:
+                idx = acc.index if hasattr(acc, 'index') else acc.get('index', 'N/A')
+                print(f"\n   Account Index: {idx}")
+                print(f"   Add to .env: ACCOUNT_INDEX={idx}")
+        elif isinstance(accounts, dict):
+            print(f"   Account data: {accounts}")
         
-        # Try alternative approach
-        print("\nTrying alternative method...")
+    except AttributeError as e:
+        print(f"SDK structure different, trying alternative...")
         try:
-            # Check available methods
-            print(f"Available AccountApi methods: {[m for m in dir(api) if not m.startswith('_')]}")
-        except:
-            pass
+            # Maybe it's a simpler client
+            print(f"\nLighter module contents: {[x for x in dir(lighter) if not x.startswith('_')]}")
+        except Exception as e2:
+            print(f"Error: {e2}")
+    except Exception as e:
+        print(f"\n❌ Error: {e}")
+        print(f"Error type: {type(e)}")
 
 
 def main():
