@@ -52,10 +52,10 @@ class LighterClient:
     
     SUPPORTED_ASSETS = ['BTC', 'ETH', 'SOL']
     
-    # Market indices on Lighter
-    MARKET_INDICES = {
-        'BTC': 0,
-        'ETH': 1,
+    # Market IDs on Lighter (from order_books API)
+    MARKET_IDS = {
+        'BTC': 1,
+        'ETH': 0,
         'SOL': 2,
     }
     
@@ -149,31 +149,13 @@ class LighterClient:
     async def get_mark_price(self, symbol: str) -> float:
         """Get current mark price"""
         try:
-            market_index = self.MARKET_INDICES.get(symbol.upper(), 0)
+            market_id = self.MARKET_IDS.get(symbol.upper(), 1)
             
-            # Try different parameter formats
-            try:
-                # Try positional argument
-                orderbook = await self._order_api.order_book_details(market_index)
-            except:
-                try:
-                    # Try 'index' parameter
-                    orderbook = await self._order_api.order_book_details(index=market_index)
-                except:
-                    # Try getting all orderbooks
-                    orderbooks = await self._order_api.order_books()
-                    if orderbooks and hasattr(orderbooks, 'order_books'):
-                        for ob in orderbooks.order_books:
-                            if hasattr(ob, 'market_index') and ob.market_index == market_index:
-                                orderbook = ob
-                                break
-                        else:
-                            orderbook = orderbooks.order_books[market_index] if len(orderbooks.order_books) > market_index else None
-                    else:
-                        orderbook = None
+            # Get orderbook details with correct parameter name
+            orderbook = await self._order_api.order_book_details(market_id=market_id)
             
             if orderbook:
-                # Try different field names
+                # Try different field names for price
                 best_ask = 0
                 best_bid = 0
                 
@@ -192,12 +174,14 @@ class LighterClient:
                             break
                 
                 if best_ask > 0 and best_bid > 0:
-                    return (best_ask + best_bid) / 2
+                    price = (best_ask + best_bid) / 2
+                    logger.info(f"Got price for {symbol}: ${price:,.2f}")
+                    return price
                 return best_ask or best_bid
             
             return 0.0
         except Exception as e:
-            logger.error(f"Failed to get mark price: {e}")
+            logger.error(f"Failed to get mark price for {symbol}: {e}")
             return 0.0
     
     async def get_positions(self) -> List[Position]:
@@ -217,7 +201,7 @@ class LighterClient:
     async def open_position(self, symbol: str, side: str, margin: float, leverage: int) -> Dict[str, Any]:
         """Open a position using market order"""
         try:
-            market_index = self.MARKET_INDICES.get(symbol.upper(), 0)
+            market_id = self.MARKET_IDS.get(symbol.upper(), 1)
             mark_price = await self.get_mark_price(symbol)
             
             if mark_price <= 0:
@@ -240,7 +224,7 @@ class LighterClient:
             
             # Use SignerClient to create market order
             result = await self._signer_client.create_market_order(
-                market_index=market_index,
+                market_id=market_id,
                 base_amount=base_amount,
                 is_buy=is_buy,
                 client_order_index=client_order_index
@@ -277,7 +261,7 @@ class LighterClient:
             raise Exception(f"No position for {symbol}")
         
         try:
-            market_index = self.MARKET_INDICES.get(symbol.upper(), 0)
+            market_id = self.MARKET_IDS.get(symbol.upper(), 1)
             mark_price = await self.get_mark_price(symbol)
             
             # Calculate PnL
@@ -293,7 +277,7 @@ class LighterClient:
             self._order_counter += 1
             
             result = await self._signer_client.create_market_order(
-                market_index=market_index,
+                market_id=market_id,
                 base_amount=base_amount,
                 is_buy=is_buy,
                 client_order_index=self._order_counter
