@@ -218,8 +218,11 @@ class LighterClient:
             try:
                 await self._signer_client.update_leverage(market_id, margin_mode, leverage)
                 logger.info(f"Leverage set successfully to {leverage}x")
+                # Wait to avoid rate limit (1 request per second)
+                await asyncio.sleep(1.5)
             except Exception as e:
                 logger.warning(f"Could not set leverage: {e}")
+                await asyncio.sleep(1.5)  # Still wait to avoid rate limit
             
             # Calculate position size based on margin and leverage
             # Position value = margin * leverage
@@ -279,10 +282,15 @@ class LighterClient:
             self._positions[symbol.upper()] = pos
             
             logger.info(f"Position opened: {result}")
+            
+            # Wait to avoid rate limit before next operation
+            await asyncio.sleep(1.5)
+            
             return {'success': True, 'order_index': client_order_index}
             
         except Exception as e:
             logger.error(f"Failed to open position: {e}")
+            await asyncio.sleep(1.5)  # Still wait to avoid rate limit
             raise
     
     async def close_position(self, symbol: str) -> Dict[str, Any]:
