@@ -143,14 +143,15 @@ class LighterClient:
     async def get_account_info(self) -> Dict[str, Any]:
         """Get account information"""
         try:
-            account = await self._account_api.account(index=self.account_index)
+            # Use positional argument instead of keyword
+            account = await self._account_api.account(self.account_index)
             return {
-                'index': account.index,
+                'index': account.index if hasattr(account, 'index') else self.account_index,
                 'collateral': float(account.collateral) if hasattr(account, 'collateral') else 0,
             }
         except Exception as e:
             logger.error(f"Failed to get account info: {e}")
-            return {}
+            return {'index': self.account_index, 'collateral': 0}
     
     async def get_balance(self) -> float:
         """Get available balance"""
