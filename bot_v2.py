@@ -75,12 +75,13 @@ def get_lighter_client():
         return MockLighterClient()
     
     # Check for required credentials
-    eth_private_key = os.getenv('ETH_PRIVATE_KEY', '')
+    # Use LIGHTER_PRIVATE_KEY (80 chars from website) or fallback to ETH_PRIVATE_KEY
+    private_key = os.getenv('LIGHTER_PRIVATE_KEY', '') or os.getenv('ETH_PRIVATE_KEY', '')
     account_index = os.getenv('ACCOUNT_INDEX', '')
     api_key_index = int(os.getenv('API_KEY_INDEX', '10'))
     base_url = os.getenv('LIGHTER_BASE_URL', 'https://mainnet.zklighter.elliot.ai')
     
-    if not eth_private_key or not account_index:
+    if not private_key or not account_index:
         logger.warning("Missing credentials, using MOCK client")
         return MockLighterClient()
     
@@ -88,7 +89,7 @@ def get_lighter_client():
         try:
             _lighter_client = LighterClient(
                 base_url=base_url,
-                eth_private_key=eth_private_key,
+                private_key=private_key,
                 account_index=int(account_index),
                 api_key_index=api_key_index
             )
