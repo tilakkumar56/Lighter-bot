@@ -151,34 +151,20 @@ class LighterClient:
         try:
             market_id = self.MARKET_IDS.get(symbol.upper(), 1)
             
-            # Get orderbook details with correct parameter name
-            orderbook = await self._order_api.order_book_details(market_id=market_id)
+            # Get orderbook details
+            result = await self._order_api.order_book_details(market_id=market_id)
             
-            if orderbook:
-                # Try different field names for price
-                best_ask = 0
-                best_bid = 0
+            if result and hasattr(result, 'order_book_details') and result.order_book_details:
+                # Get the first orderbook detail
+                ob = result.order_book_details[0]
                 
-                for ask_field in ['best_ask', 'ask', 'best_ask_price', 'ask_price']:
-                    if hasattr(orderbook, ask_field):
-                        val = getattr(orderbook, ask_field)
-                        if val:
-                            best_ask = float(val)
-                            break
-                
-                for bid_field in ['best_bid', 'bid', 'best_bid_price', 'bid_price']:
-                    if hasattr(orderbook, bid_field):
-                        val = getattr(orderbook, bid_field)
-                        if val:
-                            best_bid = float(val)
-                            break
-                
-                if best_ask > 0 and best_bid > 0:
-                    price = (best_ask + best_bid) / 2
+                # Get last_trade_price
+                if hasattr(ob, 'last_trade_price') and ob.last_trade_price:
+                    price = float(ob.last_trade_price)
                     logger.info(f"Got price for {symbol}: ${price:,.2f}")
                     return price
-                return best_ask or best_bid
             
+            logger.warning(f"No price data found for {symbol}")
             return 0.0
         except Exception as e:
             logger.error(f"Failed to get mark price for {symbol}: {e}")
