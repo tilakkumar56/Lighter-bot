@@ -150,14 +150,51 @@ class LighterClient:
         """Get current mark price"""
         try:
             market_index = self.MARKET_INDICES.get(symbol.upper(), 0)
-            orderbook = await self._order_api.order_book_details(market_index=market_index)
+            
+            # Try different parameter formats
+            try:
+                # Try positional argument
+                orderbook = await self._order_api.order_book_details(market_index)
+            except:
+                try:
+                    # Try 'index' parameter
+                    orderbook = await self._order_api.order_book_details(index=market_index)
+                except:
+                    # Try getting all orderbooks
+                    orderbooks = await self._order_api.order_books()
+                    if orderbooks and hasattr(orderbooks, 'order_books'):
+                        for ob in orderbooks.order_books:
+                            if hasattr(ob, 'market_index') and ob.market_index == market_index:
+                                orderbook = ob
+                                break
+                        else:
+                            orderbook = orderbooks.order_books[market_index] if len(orderbooks.order_books) > market_index else None
+                    else:
+                        orderbook = None
             
             if orderbook:
-                best_ask = float(orderbook.best_ask) if hasattr(orderbook, 'best_ask') and orderbook.best_ask else 0
-                best_bid = float(orderbook.best_bid) if hasattr(orderbook, 'best_bid') and orderbook.best_bid else 0
+                # Try different field names
+                best_ask = 0
+                best_bid = 0
+                
+                for ask_field in ['best_ask', 'ask', 'best_ask_price', 'ask_price']:
+                    if hasattr(orderbook, ask_field):
+                        val = getattr(orderbook, ask_field)
+                        if val:
+                            best_ask = float(val)
+                            break
+                
+                for bid_field in ['best_bid', 'bid', 'best_bid_price', 'bid_price']:
+                    if hasattr(orderbook, bid_field):
+                        val = getattr(orderbook, bid_field)
+                        if val:
+                            best_bid = float(val)
+                            break
+                
                 if best_ask > 0 and best_bid > 0:
                     return (best_ask + best_bid) / 2
                 return best_ask or best_bid
+            
             return 0.0
         except Exception as e:
             logger.error(f"Failed to get mark price: {e}")
