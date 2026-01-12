@@ -206,14 +206,23 @@ class LighterClient:
             self._order_counter += 1
             client_order_index = self._order_counter
             
-            logger.info(f"Opening {side} {symbol}: size={size:.6f}, price=${mark_price:,.2f}")
+            # Convert price to integer (check decimals from orderbook)
+            # BTC has price_decimals=1, so multiply by 10
+            price_int = int(mark_price * 10)
             
-            # Use SignerClient to create market order
+            # is_ask: True = SELL (short), False = BUY (long)
+            is_ask = side.lower() != 'long'
+            
+            logger.info(f"Opening {side} {symbol}: size={size:.6f}, price=${mark_price:,.2f}, base_amount={base_amount}, is_ask={is_ask}")
+            
+            # Use SignerClient to create market order (positional args)
             result = await self._signer_client.create_market_order(
-                market_id=market_id,
-                base_amount=base_amount,
-                is_buy=is_buy,
-                client_order_index=client_order_index
+                market_id,              # market_index
+                client_order_index,     # client_order_index
+                base_amount,            # base_amount
+                price_int,              # avg_execution_price
+                is_ask,                 # is_ask (True=sell, False=buy)
+                False                   # reduce_only
             )
             
             # Track position
@@ -262,11 +271,21 @@ class LighterClient:
             
             self._order_counter += 1
             
+            # Convert price to integer
+            price_int = int(mark_price * 10)  # Adjust decimals as needed
+            
+            # is_ask: True = SELL, False = BUY
+            # To close long, we sell (is_ask=True)
+            # To close short, we buy (is_ask=False)
+            is_ask = pos.side == 'long'
+            
             result = await self._signer_client.create_market_order(
-                market_id=market_id,
-                base_amount=base_amount,
-                is_buy=is_buy,
-                client_order_index=self._order_counter
+                market_id,              # market_index
+                self._order_counter,    # client_order_index
+                base_amount,            # base_amount
+                price_int,              # avg_execution_price
+                is_ask,                 # is_ask
+                True                    # reduce_only = True for closing
             )
             
             del self._positions[symbol.upper()]
