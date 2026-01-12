@@ -59,6 +59,20 @@ class LighterClient:
         'SOL': 2,
     }
     
+    # Size decimals for each market (from orderbook)
+    SIZE_DECIMALS = {
+        'BTC': 5,  # supported_size_decimals=5
+        'ETH': 4,  # supported_size_decimals=4
+        'SOL': 3,  # supported_size_decimals=3
+    }
+    
+    # Price decimals for each market
+    PRICE_DECIMALS = {
+        'BTC': 1,  # supported_price_decimals=1
+        'ETH': 2,  # supported_price_decimals=2
+        'SOL': 3,  # supported_price_decimals=3
+    }
+    
     def __init__(
         self,
         base_url: str,
@@ -188,32 +202,50 @@ class LighterClient:
         """Open a position using market order"""
         try:
             market_id = self.MARKET_IDS.get(symbol.upper(), 1)
+            size_decimals = self.SIZE_DECIMALS.get(symbol.upper(), 5)
+            price_decimals = self.PRICE_DECIMALS.get(symbol.upper(), 1)
+            
             mark_price = await self.get_mark_price(symbol)
             
             if mark_price <= 0:
                 raise Exception(f"Could not get valid price for {symbol}")
             
-            # Calculate size
-            notional = margin * leverage
-            size = notional / mark_price
+            # First, set leverage for this market
+            logger.info(f"Setting leverage to {leverage}x for {symbol} (market_id={market_id})")
+            try:
+                await self._signer_client.update_leverage(market_id, leverage)
+            except Exception as e:
+                logger.warning(f"Could not set leverage: {e}")
             
-            # Convert to base amount (integer with precision)
-            # Lighter uses specific decimal precision - check their docs
-            base_amount = int(size * 1e8)
+            # Calculate position size based on margin and leverage
+            # Position value = margin * leverage
+            # Size = position_value / price
+            notional_value = margin * leverage
+            size = notional_value / mark_price
             
-            is_buy = side.lower() == 'long'
+            # Convert to base amount using correct decimals
+            # e.g., BTC: size_decimals=5 means multiply by 10^5
+            base_amount = int(size * (10 ** size_decimals))
             
-            self._order_counter += 1
-            client_order_index = self._order_counter
-            
-            # Convert price to integer (check decimals from orderbook)
-            # BTC has price_decimals=1, so multiply by 10
-            price_int = int(mark_price * 10)
+            # Convert price to integer using price decimals
+            # e.g., BTC: price_decimals=1 means multiply by 10^1
+            price_int = int(mark_price * (10 ** price_decimals))
             
             # is_ask: True = SELL (short), False = BUY (long)
             is_ask = side.lower() != 'long'
             
-            logger.info(f"Opening {side} {symbol}: size={size:.6f}, price=${mark_price:,.2f}, base_amount={base_amount}, is_ask={is_ask}")
+            self._order_counter += 1
+            client_order_index = self._order_counter
+            
+            logger.info(f"Opening {side} {symbol}:")
+            logger.info(f"  Margin: ${margin:.2f}")
+            logger.info(f"  Leverage: {leverage}x")
+            logger.info(f"  Notional: ${notional_value:.2f}")
+            logger.info(f"  Size: {size:.6f}")
+            logger.info(f"  Price: ${mark_price:,.2f}")
+            logger.info(f"  base_amount: {base_amount}")
+            logger.info(f"  price_int: {price_int}")
+            logger.info(f"  is_ask: {is_ask}")
             
             # Use SignerClient to create market order (positional args)
             result = await self._signer_client.create_market_order(
@@ -257,6 +289,9 @@ class LighterClient:
         
         try:
             market_id = self.MARKET_IDS.get(symbol.upper(), 1)
+            size_decimals = self.SIZE_DECIMALS.get(symbol.upper(), 5)
+            price_decimals = self.PRICE_DECIMALS.get(symbol.upper(), 1)
+            
             mark_price = await self.get_mark_price(symbol)
             
             # Calculate PnL
@@ -265,19 +300,20 @@ class LighterClient:
                 diff = -diff
             pnl = (diff / pos.entry_price) * pos.margin * pos.leverage
             
-            # Close by opposite order
-            base_amount = int(pos.size * 1e8)
-            is_buy = pos.side == 'short'  # Opposite
-            
-            self._order_counter += 1
+            # Close by opposite order - use correct size decimals
+            base_amount = int(pos.size * (10 ** size_decimals))
             
             # Convert price to integer
-            price_int = int(mark_price * 10)  # Adjust decimals as needed
+            price_int = int(mark_price * (10 ** price_decimals))
             
             # is_ask: True = SELL, False = BUY
             # To close long, we sell (is_ask=True)
             # To close short, we buy (is_ask=False)
             is_ask = pos.side == 'long'
+            
+            self._order_counter += 1
+            
+            logger.info(f"Closing {pos.side} {symbol}: size={pos.size:.6f}, base_amount={base_amount}")
             
             result = await self._signer_client.create_market_order(
                 market_id,              # market_index
