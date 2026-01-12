@@ -212,9 +212,12 @@ class LighterClient:
                 raise Exception(f"Could not get valid price for {symbol}")
             
             # First, set leverage for this market
-            logger.info(f"Setting leverage to {leverage}x for {symbol} (market_id={market_id})")
+            # margin_mode: 0 = cross margin, 1 = isolated margin
+            margin_mode = 0  # Use cross margin
+            logger.info(f"Setting leverage to {leverage}x for {symbol} (market_id={market_id}, margin_mode={margin_mode})")
             try:
-                await self._signer_client.update_leverage(market_id, leverage)
+                await self._signer_client.update_leverage(market_id, margin_mode, leverage)
+                logger.info(f"Leverage set successfully to {leverage}x")
             except Exception as e:
                 logger.warning(f"Could not set leverage: {e}")
             
