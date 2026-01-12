@@ -1,108 +1,83 @@
 """
-Test Lighter SDK to understand key format
+Test Lighter SDK with async
 """
 import asyncio
-import inspect
 
 try:
     import lighter
-    print("✅ Lighter SDK imported successfully")
-    print(f"   Version: {lighter.__version__ if hasattr(lighter, '__version__') else 'unknown'}")
 except ImportError:
-    print("❌ Lighter SDK not installed")
-    print("Run: pip install lighter-sdk")
+    print("❌ Run: pip install lighter-sdk")
     exit(1)
 
-print("\n" + "=" * 60)
-print("LIGHTER SDK INSPECTION")
-print("=" * 60)
-
-# List all main classes
-print("\n📦 Main Classes in lighter module:")
-for name in dir(lighter):
-    if not name.startswith('_'):
-        obj = getattr(lighter, name)
-        if isinstance(obj, type):
-            print(f"   - {name}")
-
-# Check SignerClient
-print("\n" + "=" * 60)
-print("🔐 SignerClient Details:")
-print("=" * 60)
-
-if hasattr(lighter, 'SignerClient'):
-    SignerClient = lighter.SignerClient
-    
-    # Get __init__ signature
-    try:
-        sig = inspect.signature(SignerClient.__init__)
-        print(f"\n__init__ parameters:")
-        for param_name, param in sig.parameters.items():
-            if param_name != 'self':
-                default = param.default if param.default != inspect.Parameter.empty else 'required'
-                print(f"   - {param_name}: {default}")
-    except Exception as e:
-        print(f"   Could not get signature: {e}")
-    
-    # List methods
-    print(f"\nMethods:")
-    for method in dir(SignerClient):
-        if not method.startswith('_') and callable(getattr(SignerClient, method, None)):
-            print(f"   - {method}")
-else:
-    print("   SignerClient not found")
-
-# Try to find examples or documentation
-print("\n" + "=" * 60)
-print("📖 Looking for documentation...")
-print("=" * 60)
-
-if hasattr(lighter, '__doc__') and lighter.__doc__:
-    print(lighter.__doc__[:500])
-else:
-    print("No module documentation found")
-
-# Check for any example files or constants
-print("\n" + "=" * 60)
-print("🔧 Constants and Examples:")
-print("=" * 60)
-
-for name in dir(lighter):
-    obj = getattr(lighter, name)
-    if isinstance(obj, str) and not name.startswith('_'):
-        print(f"   {name} = '{obj}'")
-    elif isinstance(obj, int) and not name.startswith('_'):
-        print(f"   {name} = {obj}")
-
-print("\n" + "=" * 60)
-print("🧪 Testing SignerClient Initialization:")
-print("=" * 60)
-
-# Test with a dummy key to see exact error
 BASE_URL = "https://mainnet.zklighter.elliot.ai"
-DUMMY_64_CHAR_KEY = "a" * 64  # 64 hex chars = 32 bytes
-DUMMY_40_CHAR_KEY = "a" * 40  # 40 hex chars = 20 bytes
 
-print(f"\nTrying with 64-character key...")
-try:
-    client = lighter.SignerClient(
-        url=BASE_URL,
-        api_private_keys={10: DUMMY_64_CHAR_KEY},
-        account_index=703156
-    )
-    print("   ✅ 64-char key accepted!")
-except Exception as e:
-    print(f"   ❌ Error: {e}")
 
-print(f"\nTrying with 40-character key...")
-try:
-    client = lighter.SignerClient(
-        url=BASE_URL,
-        api_private_keys={10: DUMMY_40_CHAR_KEY},
-        account_index=703156
-    )
-    print("   ✅ 40-char key accepted!")
-except Exception as e:
-    print(f"   ❌ Error: {e}")
+async def test_with_key(key: str, key_index: int, account_index: int):
+    """Test SignerClient initialization"""
+    print(f"\nTrying key ({len(key)} chars)...")
+    
+    try:
+        client = lighter.SignerClient(
+            url=BASE_URL,
+            api_private_keys={key_index: key},
+            account_index=account_index
+        )
+        print("   ✅ SignerClient created successfully!")
+        
+        # Try to get nonce to verify it works
+        try:
+            nonce = await client.get_api_key_nonce(key_index)
+            print(f"   ✅ Nonce retrieved: {nonce}")
+        except Exception as e:
+            print(f"   ⚠️ Could not get nonce: {e}")
+        
+        await client.close()
+        return True
+        
+    except Exception as e:
+        print(f"   ❌ Error: {e}")
+        return False
 
-print("\n" + "=" * 60)
+
+async def main():
+    print("=" * 60)
+    print("LIGHTER SDK KEY FORMAT TEST")
+    print("=" * 60)
+    
+    # Get user input
+    private_key = input("\nEnter your ETH Private Key (from MetaMask): ").strip()
+    
+    # Remove 0x if present
+    if private_key.startswith("0x"):
+        private_key = private_key[2:]
+    
+    print(f"\nKey length: {len(private_key)} characters")
+    
+    account_index = int(input("Enter Account Index (703156): ").strip() or "703156")
+    api_key_index = int(input("Enter API Key Index (3-254, default 10): ").strip() or "10")
+    
+    print("\n" + "=" * 60)
+    print("Testing different key formats...")
+    print("=" * 60)
+    
+    # Test 1: Full key as-is
+    print("\n[Test 1] Using key as-is:")
+    success = await test_with_key(private_key, api_key_index, account_index)
+    
+    if not success and len(private_key) == 64:
+        # Test 2: Maybe they want first 40 chars?
+        print("\n[Test 2] Using first 40 characters:")
+        await test_with_key(private_key[:40], api_key_index, account_index)
+        
+        # Test 3: Last 40 chars?
+        print("\n[Test 3] Using last 40 characters:")
+        await test_with_key(private_key[-40:], api_key_index, account_index)
+    
+    print("\n" + "=" * 60)
+    print("If all tests failed, you may need to register the API key first")
+    print("on Lighter.xyz or use a different method.")
+    print("=" * 60)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
