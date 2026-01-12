@@ -235,11 +235,19 @@ class LighterClient:
             base_amount = int(size * (10 ** size_decimals))
             
             # Convert price to integer using price decimals
-            # e.g., BTC: price_decimals=1 means multiply by 10^1
-            price_int = int(mark_price * (10 ** price_decimals))
-            
-            # is_ask: True = SELL (short), False = BUY (long)
+            # Add slippage for market orders to ensure fill
+            # BUY (long): use higher price (+ 2% slippage)
+            # SELL (short): use lower price (- 2% slippage)
             is_ask = side.lower() != 'long'
+            
+            if is_ask:
+                # Selling - use lower price limit
+                price_with_slippage = mark_price * 0.98
+            else:
+                # Buying - use higher price limit
+                price_with_slippage = mark_price * 1.02
+            
+            price_int = int(price_with_slippage * (10 ** price_decimals))
             
             self._order_counter += 1
             client_order_index = self._order_counter
@@ -249,7 +257,8 @@ class LighterClient:
             logger.info(f"  Leverage: {leverage}x")
             logger.info(f"  Notional: ${notional_value:.2f}")
             logger.info(f"  Size: {size:.6f}")
-            logger.info(f"  Price: ${mark_price:,.2f}")
+            logger.info(f"  Market Price: ${mark_price:,.2f}")
+            logger.info(f"  Limit Price (with 2% slippage): ${price_with_slippage:,.2f}")
             logger.info(f"  base_amount: {base_amount}")
             logger.info(f"  price_int: {price_int}")
             logger.info(f"  is_ask: {is_ask}")
@@ -315,13 +324,18 @@ class LighterClient:
             # Close by opposite order - use correct size decimals
             base_amount = int(pos.size * (10 ** size_decimals))
             
-            # Convert price to integer
-            price_int = int(mark_price * (10 ** price_decimals))
-            
             # is_ask: True = SELL, False = BUY
             # To close long, we sell (is_ask=True)
             # To close short, we buy (is_ask=False)
             is_ask = pos.side == 'long'
+            
+            # Add slippage for market orders
+            if is_ask:
+                price_with_slippage = mark_price * 0.98  # Selling - lower limit
+            else:
+                price_with_slippage = mark_price * 1.02  # Buying - higher limit
+            
+            price_int = int(price_with_slippage * (10 ** price_decimals))
             
             self._order_counter += 1
             
